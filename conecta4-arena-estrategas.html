@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arena de Estrategas — Conecta 4 con Minimax y Poda Alfa-Beta</title>
+<style>
+  :root{
+    --bg:#090c11;
+    --bg-panel:#121722;
+    --bg-panel-alt:#161d2b;
+    --bg-raised:#1a2231;
+    --border:#232b3d;
+    --border-soft:#1a2130;
+    --text:#e9edf6;
+    --text-dim:#8b96ac;
+    --text-faint:#586178;
+    --cyan:#4c9eeb;
+    --cyan-dim:#2c4f74;
+    --amber:#f2a541;
+    --amber-dim:#7a5726;
+    --green:#34d399;
+    --red-player:#e5484d;
+    --red-player-dim:#5a2226;
+    --yellow-player:#f0c419;
+    --yellow-player-dim:#5c4f13;
+    --danger:#ef4444;
+    --radius-lg:18px;
+    --radius-md:12px;
+    --radius-sm:8px;
+    --mono:'Cascadia Code','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --sans:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(76,158,235,0.10), transparent),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(242,165,65,0.07), transparent),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    line-height:1.45;
+  }
+  ::selection{ background:var(--cyan-dim); color:#fff; }
+  button{ font-family:inherit; }
+  .app-shell{ max-width:1360px; margin:0 auto; padding:28px 22px 60px; }
+
+  /* ---------- Header ---------- */
+  .hero{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:18px; margin-bottom:26px; padding-bottom:20px; border-bottom:1px solid var(--border-soft); }
+  .hero-word{ font-size:clamp(28px,4vw,42px); font-weight:800; letter-spacing:-0.02em; margin:0; line-height:1; }
+  .hero-word .accent{ color:var(--cyan); }
+  .hero-sub{ margin:8px 0 0; color:var(--text-dim); font-size:14.5px; max-width:560px; }
+  .hero-badges{ display:flex; gap:8px; flex-wrap:wrap; }
+  .badge{ font-family:var(--mono); font-size:11.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--border); color:var(--text-dim); background:var(--bg-panel); white-space:nowrap; }
+  .badge.b-cyan{ border-color:var(--cyan-dim); color:var(--cyan); }
+  .badge.b-amber{ border-color:var(--amber-dim); color:var(--amber); }
+
+  /* ---------- Layout ---------- */
+  .layout{ display:grid; grid-template-columns: 1.55fr 1fr; gap:22px; align-items:start; }
+  @media (max-width: 940px){ .layout{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--bg-panel); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .panel + .panel{ margin-top:16px; }
+  .panel-title{ font-size:13px; font-weight:700; letter-spacing:0.03em; color:var(--text); margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .panel-title .dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .panel-sub{ font-size:12px; color:var(--text-faint); margin:0 0 14px; }
+
+  /* ---------- Arena / board column ---------- */
+  .arena-panel{ padding:20px; }
+  .turn-bar{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:16px; flex-wrap:wrap; }
+  .turn-indicator{ display:flex; align-items:center; gap:10px; font-size:15px; font-weight:600; }
+  .turn-chip{ width:22px; height:22px; border-radius:50%; box-shadow:inset 0 -3px 4px rgba(0,0,0,.35), 0 0 0 3px var(--bg-panel), 0 0 14px 0 var(--chip-glow,transparent); transition:background .2s, box-shadow .2s; }
+  .turn-chip.red{ background:radial-gradient(circle at 35% 30%, #ff8a8d, var(--red-player) 60%, #a12327); }
+  .turn-chip.yellow{ background:radial-gradient(circle at 35% 30%, #fff1a8, var(--yellow-player) 60%, #a5860a); }
+  .turn-thinking{ font-family:var(--mono); font-size:11.5px; color:var(--amber); display:flex; align-items:center; gap:6px; }
+  .spinner{ width:11px; height:11px; border-radius:50%; border:2px solid var(--amber-dim); border-top-color:var(--amber); animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .result-banner{ font-size:13.5px; font-weight:600; padding:7px 12px; border-radius:999px; }
+  .result-banner.win{ background:rgba(52,211,153,0.12); color:var(--green); border:1px solid rgba(52,211,153,0.3); }
+  .result-banner.draw{ background:rgba(139,150,172,0.12); color:var(--text-dim); border:1px solid var(--border); }
+
+  .board-frame{
+    position:relative; margin:0 auto; max-width:520px;
+    background:linear-gradient(180deg,#1b2437,#131a28);
+    border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 18px 40px -20px rgba(0,0,0,0.6);
+  }
+  .board-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:min(1.6vw,8px);
+    position:relative;
+  }
+  .board-col{
+    display:grid; grid-template-rows:repeat(6,1fr); gap:min(1.6vw,8px);
+    cursor:pointer; border-radius:10px; padding:4px; transition:background .15s;
+  }
+  .board-col:hover{ background:var(--col-hover,rgba(76,158,235,0.08)); }
+  .board-col.disabled{ cursor:not-allowed; }
+  .board-col.disabled:hover{ background:transparent; }
+  .cell{
+    position:relative; aspect-ratio:1/1; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #0f1420, #060810 65%);
+    box-shadow:inset 0 3px 6px rgba(0,0,0,0.6), inset 0 -1px 2px rgba(255,255,255,0.03);
+    overflow:hidden;
+  }
+  .piece{
+    position:absolute; inset:6%; border-radius:50%;
+    opacity:0; transform:translateY(-26px) scale(.75);
+    transition:transform .38s cubic-bezier(.36,1.4,.4,1), opacity .22s ease-out;
+  }
+  .piece.show{ opacity:1; transform:translateY(0) scale(1); }
+  .piece.red{ background:radial-gradient(circle at 34% 28%, #ff9599, var(--red-player) 58%, #931d21 100%); }
+  .piece.yellow{ background:radial-gradient(circle at 34% 28%, #fff3b0, var(--yellow-player) 58%, #93770c 100%); }
+  .piece.win-cell{ animation:pulseWin 1s ease-in-out infinite; box-shadow:0 0 0 3px rgba(52,211,153,0.55), 0 0 18px 2px rgba(52,211,153,0.45); }
+  @keyframes pulseWin{ 0%,100%{ transform:translateY(0) scale(1); } 50%{ transform:translateY(0) scale(1.08); } }
+
+  .col-preview{ position:absolute; top:-2px; left:0; right:0; height:0; }
+
+  /* ---------- Controls ---------- */
+  .controls{ margin-top:18px; display:flex; flex-direction:column; gap:14px; }
+  .control-row{ display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:6px; min-width:150px; flex:1; }
+  .field label{ font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-faint); font-weight:600; }
+  select{
+    background:var(--bg-raised); color:var(--text); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:9px 10px; font-size:13.5px; font-family:inherit; cursor:pointer;
+  }
+  select:focus-visible, button:focus-visible{ outline:2px solid var(--cyan); outline-offset:1px; }
+
+  .depth-group{ display:flex; gap:6px; flex-wrap:wrap; }
+  .depth-btn{
+    background:var(--bg-raised); color:var(--text-dim); border:1px solid var(--border);
+    border-radius:8px; width:34px; height:32px; font-family:var(--mono); font-size:13px; cursor:pointer;
+    transition:all .15s;
+  }
+  .depth-btn:hover{ border-color:var(--cyan-dim); color:var(--text); }
+  .depth-btn.active{ background:var(--cyan-dim); border-color:var(--cyan); color:#fff; }
+  .depth-warning{ font-size:11.5px; color:var(--amber); margin-top:2px; }
+  .depth-explain{ font-size:11.5px; color:var(--text-faint); margin:2px 0 0; max-width:520px; }
+
+  .legend-row{ display:flex; gap:16px; flex-wrap:wrap; padding:10px 12px; background:var(--bg-panel-alt); border:1px solid var(--border-soft); border-radius:var(--radius-sm); }
+  .legend-item{ display:flex; align-items:center; gap:8px; font-size:13px; }
+  .legend-chip{ width:16px; height:16px; border-radius:50%; flex-shrink:0; box-shadow:inset 0 -2px 3px rgba(0,0,0,.35); }
+  .legend-chip.red{ background:radial-gradient(circle at 35% 30%, #ff8a8d, var(--red-player) 60%, #a12327); }
+  .legend-chip.yellow{ background:radial-gradient(circle at 35% 30%, #fff1a8, var(--yellow-player) 60%, #a5860a); }
+  .legend-item .who{ color:var(--text-dim); }
+  .legend-item .algo{ font-weight:700; }
+  .legend-item .algo.tag-mm{ color:var(--cyan); }
+  .legend-item .algo.tag-ab{ color:var(--amber); }
+  .legend-item .algo.tag-human{ color:var(--text); }
+
+  .action-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .btn{
+    border:1px solid var(--border); background:var(--bg-raised); color:var(--text);
+    padding:10px 16px; border-radius:var(--radius-sm); font-size:13.5px; font-weight:600; cursor:pointer;
+    transition:transform .1s, border-color .15s, background .15s;
+  }
+  .btn:hover{ border-color:var(--cyan-dim); }
+  .btn:active{ transform:scale(.97); }
+  .btn.primary{ background:linear-gradient(180deg,#3b8ee0,#2f74c0); border-color:#2f74c0; color:#fff; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .btn.ghost{ background:transparent; }
+  .btn.toggle.on{ background:var(--amber-dim); border-color:var(--amber); color:#ffe2b0; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  /* ---------- Sidebar panels ---------- */
+  .stat-row{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px dashed var(--border-soft); font-size:13px; }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-row .k{ color:var(--text-dim); }
+  .stat-row .v{ font-family:var(--mono); font-weight:600; color:var(--text); }
+  .stat-row .v.cyan{ color:var(--cyan); }
+  .stat-row .v.amber{ color:var(--amber); }
+  .stat-row .v.green{ color:var(--green); }
+  .empty-hint{ font-size:12.5px; color:var(--text-faint); padding:10px 0; }
+
+  .compare-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  @media (max-width:520px){ .compare-grid{ grid-template-columns:1fr; } }
+  .compare-card{ background:var(--bg-panel-alt); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:12px 13px; }
+  .compare-card h4{ margin:0 0 8px; font-size:12px; letter-spacing:.02em; display:flex; align-items:center; gap:6px; }
+  .compare-card.mm h4{ color:var(--cyan); }
+  .compare-card.ab h4{ color:var(--amber); }
+  .compare-card .cdot{ width:7px; height:7px; border-radius:50%; }
+  .compare-card.mm .cdot{ background:var(--cyan); }
+  .compare-card.ab .cdot{ background:var(--amber); }
+  .compare-line{ font-family:var(--mono); font-size:12px; color:var(--text-dim); display:flex; justify-content:space-between; padding:2px 0; }
+  .compare-line b{ color:var(--text); font-weight:600; }
+
+  .savings-banner{ text-align:center; padding:10px; border-radius:var(--radius-md); background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.25); font-size:13px; color:var(--green); font-weight:700; margin-bottom:14px; }
+
+  .bars{ display:flex; flex-direction:column; gap:10px; margin-bottom:4px; }
+  .bar-row .bar-label{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-dim); margin-bottom:4px; font-family:var(--mono); }
+  .bar-track{ height:12px; background:var(--bg-panel-alt); border-radius:999px; overflow:hidden; border:1px solid var(--border-soft); }
+  .bar-fill{ height:100%; border-radius:999px; transition:width .5s ease; }
+  .bar-fill.mm{ background:linear-gradient(90deg,#3b7cc4,var(--cyan)); }
+  .bar-fill.ab{ background:linear-gradient(90deg,#c07f24,var(--amber)); }
+
+  .analysis-list{ display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+  .analysis-item{ display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:12.5px; padding:7px 9px; border-radius:8px; background:var(--bg-panel-alt); border:1px solid var(--border-soft); }
+  .analysis-item .colnum{ color:var(--text-faint); width:58px; flex-shrink:0; }
+  .analysis-item .val{ flex:1; color:var(--text); }
+  .analysis-item.best{ border-color:rgba(52,211,153,0.4); background:rgba(52,211,153,0.06); }
+  .analysis-item.best .val{ color:var(--green); font-weight:700; }
+  .analysis-item.pruned{ opacity:.7; }
+  .analysis-item.pruned .val{ color:var(--amber); }
+  .analysis-item .ref{ color:var(--text-faint); font-size:11px; }
+  .analysis-note{ font-size:12px; color:var(--text-dim); margin-top:10px; padding:9px 10px; background:var(--bg-panel-alt); border-radius:8px; border:1px solid var(--border-soft); }
+
+  .explain-block{ margin-bottom:12px; }
+  .explain-block:last-child{ margin-bottom:0; }
+  .explain-block h4{ margin:0 0 4px; font-size:12.5px; display:flex; align-items:center; gap:7px; }
+  .explain-block h4 .edot{ width:7px; height:7px; border-radius:50%; }
+  .explain-block.mm h4 .edot{ background:var(--cyan); }
+  .explain-block.ab h4 .edot{ background:var(--amber); }
+  .explain-block.mm h4{ color:var(--cyan); }
+  .explain-block.ab h4{ color:var(--amber); }
+  .explain-block p{ margin:0; font-size:12.5px; color:var(--text-dim); }
+
+  footer.note{ margin-top:28px; text-align:center; font-size:11.5px; color:var(--text-faint); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="hero">
+    <div>
+      <h1 class="hero-word">ARENA DE ESTRATEGAS<span class="accent">.</span></h1>
+      <p class="hero-sub">Conecta 4 con inteligencia artificial: observa cómo piensan y se enfrentan los agentes Minimax y Alfa-Beta.</p>
+    </div>
+    <div class="hero-badges">
+      <span class="badge b-cyan">MINIMAX</span>
+      <span class="badge b-amber">ALFA-BETA</span>
+      <span class="badge">búsqueda adversarial</span>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- ================= ARENA / BOARD ================= -->
+    <div class="panel arena-panel">
+      <div class="turn-bar">
+        <div class="turn-indicator">
+          <span class="turn-chip" id="turnChip"></span>
+          <span id="turnLabel">Turno de Rojo</span>
+        </div>
+        <div id="turnStatus"></div>
+      </div>
+
+      <div class="board-frame">
+        <div class="board-grid" id="boardGrid"></div>
+      </div>
+
+      <div class="controls">
+        <div class="control-row">
+          <div class="field" style="min-width:220px;">
+            <label for="modeSelect">Modo de juego</label>
+            <select id="modeSelect">
+              <option value="pvh_mm">Jugador vs Minimax</option>
+              <option value="pvh_ab">Jugador vs Alfa-Beta</option>
+              <option value="mm_vs_mm">Minimax vs Minimax</option>
+              <option value="mm_vs_ab">Minimax vs Alfa-Beta</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="legend-row" id="legendRow"></div>
+
+        <div class="control-row">
+          <div class="field" id="singleDepthField" style="min-width:200px;">
+            <label>Profundidad IA</label>
+            <div class="depth-group" id="depthSingleGroup"></div>
+          </div>
+          <div class="field" id="p1DepthField" style="min-width:200px; display:none;">
+            <label>Profundidad Rojo</label>
+            <div class="depth-group" id="depthP1Group"></div>
+          </div>
+          <div class="field" id="p2DepthField" style="min-width:200px; display:none;">
+            <label>Profundidad Amarillo</label>
+            <div class="depth-group" id="depthP2Group"></div>
+          </div>
+        </div>
+        <p class="depth-explain">La profundidad indica cuántas jugadas hacia adelante calcula el agente antes de decidir. Más profundidad = decisiones más fuertes, pero más lentas de calcular.</p>
+        <div id="depthWarning" class="depth-warning" style="display:none;">Profundidad elevada: el cálculo puede tardar varios segundos.</div>
+
+        <div class="control-row">
+          <div class="field">
+            <label for="manualAlgoSelect">Algoritmo para analizar posición</label>
+            <select id="manualAlgoSelect">
+              <option value="alphabeta">Alfa-Beta</option>
+              <option value="minimax">Minimax</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:200px;">
+            <label>Profundidad de análisis</label>
+            <div class="depth-group" id="depthManualGroup"></div>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button class="btn primary" id="btnNewGame">Nueva partida</button>
+          <button class="btn" id="btnPause">Pausar</button>
+          <button class="btn" id="btnAnalyze">Analizar posición actual</button>
+          <button class="btn ghost toggle on" id="btnToggleAnalysis">Ver análisis: ON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SIDEBAR ================= -->
+    <div>
+
+      <div class="panel">
+        <p class="panel-title"><span class="dot" id="algoDotEl" style="background:var(--cyan);"></span> Algoritmo actual</p>
+        <p class="panel-sub" id="algoSubEl">Aún no se ha calculado ninguna jugada.</p>
+        <div id="algoStatsEl"><div class="empty-hint">Juega una partida o pulsa "Analizar posición actual" para ver estadísticas reales de búsqueda.</div></div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">Comparación de búsqueda</p>
+        <p class="panel-sub">Minimax y Alfa-Beta evaluando la misma posición y la misma profundidad.</p>
+        <div id="comparisonEl"><div class="empty-hint">Se completa automáticamente tras cada jugada de la IA, o al analizar manualmente.</div></div>
+      </div>
+
+      <div class="panel" id="analysisPanel">
+        <p class="panel-title">Análisis de columnas</p>
+        <p class="panel-sub">Valor obtenido por columna. Las ramas descartadas por Alfa-Beta se marcan como PODADA.</p>
+        <div id="analysisListEl"><div class="empty-hint">Sin datos todavía.</div></div>
+      </div>
+
+      <div class="panel">
+        <p class="panel-title">¿Cómo decide la IA?</p>
+        <div class="explain-block mm">
+          <h4><span class="edot"></span>MINIMAX</h4>
+          <p>La IA analiza sus posibles jugadas y supone que el rival responderá siempre de la mejor manera posible para él. Explora el árbol de jugadas hasta la profundidad configurada y elige la opción que maximiza su peor escenario garantizado.</p>
+        </div>
+        <div class="explain-block ab">
+          <h4><span class="edot"></span>ALFA-BETA</h4>
+          <p>Realiza la misma búsqueda que Minimax, pero mantiene dos límites (alfa y beta) y elimina ramas que ya no pueden cambiar la decisión final. El resultado es idéntico a Minimax, con menos nodos explorados.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="note">Arena de Estrategas · laboratorio de búsqueda adversarial</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   1) MOTOR DEL JUEGO (tablero, reglas)
+   ========================================================================= */
+const ROWS = 6, COLS = 7;
+const EMPTY = 0;
+
+function createBoard(){ return Array.from({length:ROWS}, () => Array(COLS).fill(EMPTY)); }
+function cloneBoard(b){ return b.map(row => row.slice()); }
+
+function getValidMoves(b){
+  const moves = [];
+  for(let c=0;c<COLS;c++) if(b[0][c]===EMPTY) moves.push(c);
+  return moves;
+}
+
+function dropPiece(b, col, player){
+  const nb = cloneBoard(b);
+  for(let r=ROWS-1;r>=0;r--){
+    if(nb[r][col]===EMPTY){ nb[r][col]=player; return {board:nb, row:r}; }
+  }
+  return null; // columna llena
+}
+
+function checkWinner(b, player){
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      if(b[r][c]!==player) continue;
+      for(const [dr,dc] of dirs){
+        const cells = [];
+        let ok = true;
+        for(let k=0;k<4;k++){
+          const rr=r+dr*k, cc=c+dc*k;
+          if(rr<0||rr>=ROWS||cc<0||cc>=COLS||b[rr][cc]!==player){ ok=false; break; }
+          cells.push([rr,cc]);
+        }
+        if(ok) return {win:true, cells};
+      }
+    }
+  }
+  return {win:false, cells:[]};
+}
+
+function isBoardFull(b){ return getValidMoves(b).length===0; }
+
+/* =========================================================================
+   2) EVALUACION DEL TABLERO (heurística, sin aleatoriedad)
+   ========================================================================= */
+function evaluateWindow(w, ai, hu){
+  let a=0,h=0,e=0;
+  for(const v of w){ if(v===ai) a++; else if(v===hu) h++; else e++; }
+  if(a===4) return 100000;               // victoria de la IA
+  if(h===4) return -100000;              // victoria del rival
+  if(a===3 && e===1) return 100;         // tres fichas propias + hueco: amenaza fuerte
+  if(a===2 && e===2) return 10;          // dos fichas propias + huecos: amenaza en desarrollo
+  if(h===3 && e===1) return -120;        // tres fichas rivales + hueco: posición peligrosa (bloquear)
+  if(h===2 && e===2) return -10;         // dos fichas rivales: vigilar
+  return 0;
+}
+
+function evaluarTablero(estado, aiPlayer, humanPlayer){
+  const b = estado;
+  let score = 0;
+
+  // Control de la zona central: la columna central participa en más líneas de 4
+  for(let r=0;r<ROWS;r++){
+    if(b[r][3]===aiPlayer) score += 6;
+    else if(b[r][3]===humanPlayer) score -= 6;
+  }
+
+  // Horizontal
+  for(let r=0;r<ROWS;r++)
+    for(let c=0;c<COLS-3;c++)
+      score += evaluateWindow([b[r][c],b[r][c+1],b[r][c+2],b[r][c+3]], aiPlayer, humanPlayer);
+
+  // Vertical
+  for(let c=0;c<COLS;c++)
+    for(let r=0;r<ROWS-3;r++)
+      score += evaluateWindow([b[r][c],b[r+1][c],b[r+2][c],b[r+3][c]], aiPlayer, humanPlayer);
+
+  // Diagonal descendente (\)
+  for(let r=0;r<ROWS-3;r++)
+    for(let c=0;c<COLS-3;c++)
+      score += evaluateWindow([b[r][c],b[r+1][c+1],b[r+2][c+2],b[r+3][c+3]], aiPlayer, humanPlayer);
+
+  // Diagonal ascendente (/)
+  for(let r=0;r<ROWS-3;r++)
+    for(let c=3;c<COLS;c++)
+      score += evaluateWindow([b[r][c],b[r+1][c-1],b[r+2][c-2],b[r+3][c-3]], aiPlayer, humanPlayer);
+
+  return score;
+}
+
+function terminalValue(b, ai, hu, depthRemaining){
+  if(checkWinner(b, ai).win) return 1000000 + depthRemaining;   // ganar antes vale más
+  if(checkWinner(b, hu).win) return -1000000 - depthRemaining;  // perder tarde es menos malo
+  if(isBoardFull(b)) return 0;
+  return null;
+}
+
+/* =========================================================================
+   3) MINIMAX (sin poda)
+   ========================================================================= */
+function minimaxRec(b, depth, maximizing, ai, hu, stats){
+  stats.nodos++;
+  const t = terminalValue(b, ai, hu, depth);
+  if(t !== null) return t;
+  if(depth === 0) return evaluarTablero(b, ai, hu);
+
+  const valids = getValidMoves(b);
+  if(maximizing){
+    let best = -Infinity;
+    for(const c of valids){
+      const child = dropPiece(b, c, ai).board;
+      best = Math.max(best, minimaxRec(child, depth-1, false, ai, hu, stats));
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for(const c of valids){
+      const child = dropPiece(b, c, hu).board;
+      best = Math.min(best, minimaxRec(child, depth-1, true, ai, hu, stats));
+    }
+    return best;
+  }
+}
+
+// function agenteMinimax(estado, profundidad) -> {accion, valor, estadisticas}
+function agenteMinimax(estado, profundidad, aiPlayer, humanPlayer){
+  const t0 = performance.now();
+  const stats = { nodos: 0 };
+  const valids = getValidMoves(estado);
+  let bestVal = -Infinity, bestCol = valids[0];
+  const analisis = [];
+
+  for(const c of valids){
+    const child = dropPiece(estado, c, aiPlayer).board;
+    const val = minimaxRec(child, profundidad-1, false, aiPlayer, humanPlayer, stats);
+    analisis.push({ col:c, value:val });
+    if(val > bestVal){ bestVal = val; bestCol = c; }
+  }
+
+  const t1 = performance.now();
+  return {
+    accion: bestCol,
+    valor: bestVal,
+    estadisticas: {
+      algoritmo: 'Minimax',
+      nodosEvaluados: stats.nodos,
+      profundidad: profundidad,
+      tiempoMs: t1 - t0,
+      valorFinal: bestVal
+    },
+    analisis
+  };
+}
+
+/* =========================================================================
+   4) MINIMAX CON PODA ALFA-BETA
+   ========================================================================= */
+function alphabetaRec(b, depth, alpha, beta, maximizing, ai, hu, stats){
+  stats.nodos++;
+  const t = terminalValue(b, ai, hu, depth);
+  if(t !== null) return t;
+  if(depth === 0) return evaluarTablero(b, ai, hu);
+
+  const valids = getValidMoves(b);
+  if(maximizing){
+    let value = -Infinity;
+    for(let i=0;i<valids.length;i++){
+      const child = dropPiece(b, valids[i], ai).board;
+      value = Math.max(value, alphabetaRec(child, depth-1, alpha, beta, false, ai, hu, stats));
+      alpha = Math.max(alpha, value);
+      if(alpha >= beta){ stats.podados += (valids.length - 1 - i); break; } // poda: el rival ya evitaría esta rama
+    }
+    return value;
+  } else {
+    let value = Infinity;
+    for(let i=0;i<valids.length;i++){
+      const child = dropPiece(b, valids[i], hu).board;
+      value = Math.min(value, alphabetaRec(child, depth-1, alpha, beta, true, ai, hu, stats));
+      beta = Math.min(beta, value);
+      if(alpha >= beta){ stats.podados += (valids.length - 1 - i); break; } // poda: la IA no elegiría esta rama
+    }
+    return value;
+  }
+}
+
+// function agenteAlfaBeta(estado, profundidad) -> {accion, valor, estadisticas}
+function agenteAlfaBeta(estado, profundidad, aiPlayer, humanPlayer){
+  const t0 = performance.now();
+  const stats = { nodos: 0, podados: 0 };
+  const valids = getValidMoves(estado);
+  let alpha = -Infinity, beta = Infinity;
+  let bestVal = -Infinity, bestCol = valids[0];
+  const analisis = [];
+
+  // Recorremos cada columna raíz manteniendo alfa entre columnas: si una columna
+  // no logra superar el mejor valor ya encontrado (alfa), su búsqueda interna
+  // se corta en cuanto deja de poder mejorar la decisión -> se marca PODADA.
+  for(const c of valids){
+    const child = dropPiece(estado, c, aiPlayer).board;
+    const alphaAntes = alpha;
+    const val = alphabetaRec(child, profundidad-1, alpha, beta, false, aiPlayer, humanPlayer, stats);
+    let podada = false;
+    if(val > alpha){
+      alpha = val; bestVal = val; bestCol = c;
+    } else {
+      podada = alphaAntes > -Infinity; // la primera columna siempre se explora por completo
+    }
+    analisis.push({ col:c, value:val, podada });
+  }
+
+  const t1 = performance.now();
+  return {
+    accion: bestCol,
+    valor: bestVal,
+    estadisticas: {
+      algoritmo: 'Alfa-Beta',
+      nodosEvaluados: stats.nodos,
+      nodosPodados: stats.podados,
+      profundidad: profundidad,
+      tiempoMs: t1 - t0,
+      valorFinal: bestVal
+    },
+    analisis
+  };
+}
+
+/* =========================================================================
+   5) ESTADO DE LA APLICACION / UI
+   ========================================================================= */
+const RED = 1, YELLOW = 2;
+const DEPTH_OPTIONS = [2,3,4,5,6,7];
+
+const MODES = {
+  pvh_mm:   { label:'Jugador vs Minimax',      p1:'human', p2:'minimax'  },
+  pvh_ab:   { label:'Jugador vs Alfa-Beta',    p1:'human', p2:'alphabeta'},
+  mm_vs_mm: { label:'Minimax vs Minimax',      p1:'minimax',   p2:'minimax'  },
+  mm_vs_ab: { label:'Minimax vs Alfa-Beta',    p1:'minimax',   p2:'alphabeta'}
+};
+
+const state = {
+  board: createBoard(),
+  turn: RED,
+  mode: 'pvh_ab',
+  depthSingle: 4,
+  depthP1: 4,
+  depthP2: 4,
+  manualAlgo: 'alphabeta',
+  manualDepth: 4,
+  paused: false,
+  over: false,
+  winner: null,
+  winCells: [],
+  thinking: false,
+  showAnalysis: true,
+  lastAgentStats: null,
+  lastComparison: null,
+  lastAnalysis: null // {analisis:[...], refAnalisis:[...]}
+};
+
+function playerTypeFor(playerNum){
+  const m = MODES[state.mode];
+  const t = playerNum === RED ? m.p1 : m.p2;
+  return t; // 'human' | 'minimax' | 'alphabeta'
+}
+function depthFor(playerNum){
+  const m = MODES[state.mode];
+  if(state.mode === 'mm_vs_mm' || state.mode === 'mm_vs_ab'){
+    return playerNum === RED ? state.depthP1 : state.depthP2;
+  }
+  return state.depthSingle;
+}
+
+/* ---------- Referencias DOM ---------- */
+const boardGrid = document.getElementById('boardGrid');
+const turnChip = document.getElementById('turnChip');
+const turnLabel = document.getElementById('turnLabel');
+const turnStatus = document.getElementById('turnStatus');
+const modeSelect = document.getElementById('modeSelect');
+const legendRow = document.getElementById('legendRow');
+const manualAlgoSelect = document.getElementById('manualAlgoSelect');
+const depthSingleGroup = document.getElementById('depthSingleGroup');
+const depthP1Group = document.getElementById('depthP1Group');
+const depthP2Group = document.getElementById('depthP2Group');
+const depthManualGroup = document.getElementById('depthManualGroup');
+const singleDepthField = document.getElementById('singleDepthField');
+const p1DepthField = document.getElementById('p1DepthField');
+const p2DepthField = document.getElementById('p2DepthField');
+const depthWarning = document.getElementById('depthWarning');
+const btnNewGame = document.getElementById('btnNewGame');
+const btnPause = document.getElementById('btnPause');
+const btnAnalyze = document.getElementById('btnAnalyze');
+const btnToggleAnalysis = document.getElementById('btnToggleAnalysis');
+const algoDotEl = document.getElementById('algoDotEl');
+const algoSubEl = document.getElementById('algoSubEl');
+const algoStatsEl = document.getElementById('algoStatsEl');
+const comparisonEl = document.getElementById('comparisonEl');
+const analysisPanel = document.getElementById('analysisPanel');
+const analysisListEl = document.getElementById('analysisListEl');
+
+/* ---------- Construcción de controles ---------- */
+function buildDepthGroup(container, getValue, setValue){
+  container.innerHTML = '';
+  DEPTH_OPTIONS.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'depth-btn' + (getValue()===d ? ' active' : '');
+    btn.textContent = d;
+    btn.type = 'button';
+    btn.addEventListener('click', () => { setValue(d); renderControls(); });
+    container.appendChild(btn);
+  });
+}
+
+function agentLabel(type){
+  if(type==='minimax') return { text:'Minimax', cls:'tag-mm' };
+  if(type==='alphabeta') return { text:'Alfa-Beta', cls:'tag-ab' };
+  return { text:'Jugador', cls:'tag-human' };
+}
+
+function renderLegend(){
+  const p1 = agentLabel(playerTypeFor(RED));
+  const p2 = agentLabel(playerTypeFor(YELLOW));
+  legendRow.innerHTML =
+    '<div class="legend-item"><span class="legend-chip red"></span><span class="who">Rojo es</span> <span class="algo '+p1.cls+'">'+p1.text+'</span></div>' +
+    '<div class="legend-item"><span class="legend-chip yellow"></span><span class="who">Amarillo es</span> <span class="algo '+p2.cls+'">'+p2.text+'</span></div>';
+}
+
+function renderControls(){
+  modeSelect.value = state.mode;
+  manualAlgoSelect.value = state.manualAlgo;
+  renderLegend();
+
+  const single = state.mode==='pvh_mm' || state.mode==='pvh_ab';
+  const dual = state.mode==='mm_vs_mm' || state.mode==='mm_vs_ab';
+  singleDepthField.style.display = single ? '' : 'none';
+  p1DepthField.style.display = dual ? '' : 'none';
+  p2DepthField.style.display = dual ? '' : 'none';
+
+  buildDepthGroup(depthSingleGroup, () => state.depthSingle, v => state.depthSingle = v);
+  buildDepthGroup(depthP1Group, () => state.depthP1, v => state.depthP1 = v);
+  buildDepthGroup(depthP2Group, () => state.depthP2, v => state.depthP2 = v);
+  buildDepthGroup(depthManualGroup, () => state.manualDepth, v => state.manualDepth = v);
+
+  const maxDepth = Math.max(
+    single ? state.depthSingle : 0,
+    dual ? state.depthP1 : 0,
+    dual ? state.depthP2 : 0,
+    state.manualDepth
+  );
+  depthWarning.style.display = maxDepth >= 6 ? '' : 'none';
+
+  btnPause.textContent = state.paused ? 'Reanudar' : 'Pausar';
+  btnPause.disabled = state.over;
+  btnToggleAnalysis.textContent = 'Ver análisis: ' + (state.showAnalysis ? 'ON' : 'OFF');
+  btnToggleAnalysis.classList.toggle('on', state.showAnalysis);
+  analysisPanel.style.display = state.showAnalysis ? '' : 'none';
+
+  const isHumanTurn = !state.over && playerTypeFor(state.turn)==='human' && !state.thinking;
+  btnAnalyze.disabled = state.thinking;
+}
+
+/* ---------- Render del tablero ---------- */
+function renderBoard(animateCell){
+  boardGrid.innerHTML = '';
+  for(let c=0;c<COLS;c++){
+    const colDiv = document.createElement('div');
+    const clickable = !state.over && !state.thinking && !state.paused && playerTypeFor(state.turn)==='human' && getValidMoves(state.board).includes(c);
+    colDiv.className = 'board-col' + (clickable ? '' : ' disabled');
+    if(clickable){
+      colDiv.style.setProperty('--col-hover', state.turn===RED ? 'rgba(229,72,77,0.14)' : 'rgba(240,196,25,0.14)');
+      colDiv.addEventListener('click', () => onColumnClick(c));
+    }
+    for(let r=0;r<ROWS;r++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const val = state.board[r][c];
+      if(val !== EMPTY){
+        const piece = document.createElement('div');
+        piece.className = 'piece ' + (val===RED ? 'red' : 'yellow');
+        const isWin = state.winCells.some(([wr,wc]) => wr===r && wc===c);
+        if(isWin) piece.classList.add('win-cell');
+        cell.appendChild(piece);
+        const isNew = animateCell && animateCell.r===r && animateCell.c===c;
+        requestAnimationFrame(() => requestAnimationFrame(() => piece.classList.add('show')));
+      }
+      colDiv.appendChild(cell);
+    }
+    boardGrid.appendChild(colDiv);
+  }
+}
+
+function renderTurn(){
+  turnChip.className = 'turn-chip ' + (state.turn===RED ? 'red' : 'yellow');
+  const type = playerTypeFor(state.turn);
+  const colorName = state.turn===RED ? 'Rojo' : 'Amarillo';
+  let who = 'Jugador';
+  if(type==='minimax') who='Minimax';
+  else if(type==='alphabeta') who='Alfa-Beta';
+
+  if(state.over){
+    if(state.winner){
+      const winColor = state.winner===RED ? 'Rojo' : 'Amarillo';
+      turnLabel.textContent = 'Partida terminada';
+      turnStatus.innerHTML = '<span class="result-banner win">Gana ' + winColor + '</span>';
+    } else {
+      turnLabel.textContent = 'Partida terminada';
+      turnStatus.innerHTML = '<span class="result-banner draw">Empate — tablero lleno</span>';
+    }
+    return;
+  }
+
+  turnLabel.textContent = 'Turno de ' + colorName + (type==='human' ? '' : ' · ' + who);
+  if(state.paused){
+    turnStatus.innerHTML = '<span class="turn-thinking" style="color:var(--text-faint)">Pausado</span>';
+  } else if(state.thinking){
+    turnStatus.innerHTML = '<span class="turn-thinking"><span class="spinner"></span>' + who + ' calculando…</span>';
+  } else {
+    turnStatus.innerHTML = '';
+  }
+}
+
+/* ---------- Render de paneles laterales ---------- */
+function renderAlgoPanel(){
+  const s = state.lastAgentStats;
+  if(!s){
+    algoDotEl.style.background = 'var(--cyan)';
+    algoSubEl.textContent = 'Aún no se ha calculado ninguna jugada.';
+    algoStatsEl.innerHTML = '<div class="empty-hint">Juega una partida o pulsa "Analizar posición actual" para ver estadísticas reales de búsqueda.</div>';
+    return;
+  }
+  algoDotEl.style.background = s.algoritmo==='Minimax' ? 'var(--cyan)' : 'var(--amber)';
+  algoSubEl.textContent = s.algoritmo + ' · profundidad ' + s.profundidad;
+  let html = '';
+  html += statRow('Nodos evaluados', s.nodosEvaluados.toLocaleString('es'), s.algoritmo==='Minimax'?'cyan':'amber');
+  if(s.algoritmo==='Alfa-Beta'){
+    html += statRow('Nodos podados', s.nodosPodados.toLocaleString('es'), 'amber');
+  }
+  html += statRow('Tiempo de decisión', s.tiempoMs.toFixed(1) + ' ms');
+  html += statRow('Valor de la posición', formatValue(s.valorFinal), 'green');
+  algoStatsEl.innerHTML = html;
+}
+function statRow(k,v,cls){
+  return '<div class="stat-row"><span class="k">'+k+'</span><span class="v'+(cls?(' '+cls):'')+'">'+v+'</span></div>';
+}
+function formatValue(v){
+  if(v >= 900000) return '+∞ (victoria IA)';
+  if(v <= -900000) return '-∞ (victoria rival)';
+  return (v>0?'+':'') + v;
+}
+
+function renderComparison(){
+  const c = state.lastComparison;
+  if(!c){
+    comparisonEl.innerHTML = '<div class="empty-hint">Se completa automáticamente tras cada jugada de la IA, o al analizar manualmente.</div>';
+    return;
+  }
+  const mm = c.minimax, ab = c.alphabeta;
+  const ahorro = mm.nodosEvaluados>0 ? ((mm.nodosEvaluados-ab.nodosEvaluados)/mm.nodosEvaluados*100) : 0;
+
+  let html = '<div class="compare-grid">';
+  html += '<div class="compare-card mm"><h4><span class="cdot"></span>Minimax</h4>'
+        + '<div class="compare-line"><span>Nodos</span><b>'+mm.nodosEvaluados.toLocaleString('es')+'</b></div>'
+        + '<div class="compare-line"><span>Tiempo</span><b>'+mm.tiempoMs.toFixed(1)+' ms</b></div></div>';
+  html += '<div class="compare-card ab"><h4><span class="cdot"></span>Alfa-Beta</h4>'
+        + '<div class="compare-line"><span>Nodos</span><b>'+ab.nodosEvaluados.toLocaleString('es')+'</b></div>'
+        + '<div class="compare-line"><span>Podados</span><b>'+ab.nodosPodados.toLocaleString('es')+'</b></div>'
+        + '<div class="compare-line"><span>Tiempo</span><b>'+ab.tiempoMs.toFixed(1)+' ms</b></div></div>';
+  html += '</div>';
+  html += '<div class="savings-banner">Ahorro de nodos: ' + ahorro.toFixed(1) + '%</div>';
+
+  const maxNodes = Math.max(mm.nodosEvaluados, 1);
+  const mmPct = 100;
+  const abPct = Math.max(2, (ab.nodosEvaluados/maxNodes*100));
+  html += '<div class="bars">';
+  html += '<div class="bar-row"><div class="bar-label"><span>Estados explorados (Minimax)</span><span>'+mm.nodosEvaluados.toLocaleString('es')+'</span></div><div class="bar-track"><div class="bar-fill mm" style="width:'+mmPct+'%"></div></div></div>';
+  html += '<div class="bar-row"><div class="bar-label"><span>Estados con Alfa-Beta</span><span>'+ab.nodosEvaluados.toLocaleString('es')+'</span></div><div class="bar-track"><div class="bar-fill ab" style="width:'+abPct+'%"></div></div></div>';
+  html += '</div>';
+
+  comparisonEl.innerHTML = html;
+}
+
+function renderAnalysis(){
+  const a = state.lastAnalysis;
+  if(!a){
+    analysisListEl.innerHTML = '<div class="empty-hint">Sin datos todavía.</div>';
+    return;
+  }
+  const { analisis, refAnalisis, bestCol } = a;
+  const refMap = {};
+  (refAnalisis||[]).forEach(r => refMap[r.col] = r.value);
+
+  let html = '<div class="analysis-list">';
+  let prunedCount = 0;
+  analisis.forEach(item => {
+    const isBest = item.col === bestCol;
+    const isPruned = !!item.podada;
+    if(isPruned) prunedCount++;
+    let cls = 'analysis-item' + (isBest?' best':'') + (isPruned?' pruned':'');
+    let valText;
+    if(isPruned){
+      valText = 'PODADA';
+    } else {
+      valText = 'valor: ' + formatValue(item.value) + (isBest ? '  ★ MEJOR' : '');
+    }
+    let refText = '';
+    if(isPruned && refMap[item.col] !== undefined){
+      refText = '<span class="ref"> (Minimax: ' + formatValue(refMap[item.col]) + ')</span>';
+    }
+    html += '<div class="'+cls+'"><span class="colnum">Columna '+(item.col+1)+'</span><span class="val">'+valText+refText+'</span></div>';
+  });
+  html += '</div>';
+  if(prunedCount>0){
+    html += '<div class="analysis-note">Alfa-Beta descartó ' + prunedCount + ' rama' + (prunedCount===1?'':'s') + ' porque ya no ' + (prunedCount===1?'podía':'podían') + ' mejorar la decisión.</div>';
+  }
+  analysisListEl.innerHTML = html;
+}
+
+function renderAll(animateCell){
+  renderBoard(animateCell);
+  renderTurn();
+  renderControls();
+  renderAlgoPanel();
+  renderComparison();
+  renderAnalysis();
+}
+
+/* =========================================================================
+   6) FLUJO DE JUEGO
+   ========================================================================= */
+function onColumnClick(col){
+  if(state.over || state.thinking || state.paused) return;
+  if(playerTypeFor(state.turn) !== 'human') return;
+  if(!getValidMoves(state.board).includes(col)) return;
+  makeMove(col);
+}
+
+function makeMove(col){
+  const player = state.turn;
+  const result = dropPiece(state.board, col, player);
+  if(!result) return;
+  state.board = result.board;
+
+  const win = checkWinner(state.board, player);
+  if(win.win){
+    state.over = true; state.winner = player; state.winCells = win.cells;
+  } else if(isBoardFull(state.board)){
+    state.over = true; state.winner = null; state.winCells = [];
+  } else {
+    state.turn = player===RED ? YELLOW : RED;
+  }
+
+  renderAll({ r: result.row, c: col });
+
+  if(!state.over && !state.paused){
+    const nextType = playerTypeFor(state.turn);
+    if(nextType !== 'human') scheduleAIMove();
+  }
+}
+
+function scheduleAIMove(){
+  state.thinking = true;
+  renderTurn(); renderControls();
+  setTimeout(runAIMove, 420);
+}
+
+function runAIMove(){
+  if(state.paused || state.over) { state.thinking = false; renderTurn(); renderControls(); return; }
+
+  const aiPlayer = state.turn;
+  const humanPlayer = aiPlayer===RED ? YELLOW : RED;
+  const type = playerTypeFor(aiPlayer);
+  const depth = depthFor(aiPlayer);
+  const boardBefore = cloneBoard(state.board);
+
+  // Ejecutamos ambos agentes sobre la misma posición y profundidad para la comparación real
+  const mm = agenteMinimax(boardBefore, depth, aiPlayer, humanPlayer);
+  const ab = agenteAlfaBeta(boardBefore, depth, aiPlayer, humanPlayer);
+  const decision = type === 'minimax' ? mm : ab;
+
+  state.lastAgentStats = decision.estadisticas;
+  state.lastComparison = { minimax: mm.estadisticas, alphabeta: ab.estadisticas };
+  state.lastAnalysis = { analisis: ab.analisis, refAnalisis: mm.analisis, bestCol: ab.accion };
+
+  state.thinking = false;
+  makeMove(decision.accion);
+}
+
+function runManualAnalysis(){
+  if(state.thinking) return;
+  const aiPlayer = state.turn;
+  const humanPlayer = aiPlayer===RED ? YELLOW : RED;
+  const depth = state.manualDepth;
+  const boardNow = cloneBoard(state.board);
+
+  const mm = agenteMinimax(boardNow, depth, aiPlayer, humanPlayer);
+  const ab = agenteAlfaBeta(boardNow, depth, aiPlayer, humanPlayer);
+  const chosen = state.manualAlgo === 'minimax' ? mm : ab;
+
+  state.lastAgentStats = chosen.estadisticas;
+  state.lastComparison = { minimax: mm.estadisticas, alphabeta: ab.estadisticas };
+  state.lastAnalysis = { analisis: ab.analisis, refAnalisis: mm.analisis, bestCol: ab.accion };
+
+  renderAlgoPanel();
+  renderComparison();
+  renderAnalysis();
+}
+
+function newGame(){
+  state.board = createBoard();
+  state.turn = RED;
+  state.over = false;
+  state.winner = null;
+  state.winCells = [];
+  state.thinking = false;
+  state.paused = false;
+  state.lastAgentStats = null;
+  state.lastComparison = null;
+  state.lastAnalysis = null;
+  renderAll();
+  if(playerTypeFor(state.turn) !== 'human') scheduleAIMove();
+}
+
+/* ---------- Listeners de controles ---------- */
+modeSelect.addEventListener('change', () => {
+  state.mode = modeSelect.value;
+  newGame();
+});
+manualAlgoSelect.addEventListener('change', () => { state.manualAlgo = manualAlgoSelect.value; });
+
+btnNewGame.addEventListener('click', newGame);
+
+btnPause.addEventListener('click', () => {
+  state.paused = !state.paused;
+  renderTurn(); renderControls();
+  if(!state.paused && !state.over && !state.thinking && playerTypeFor(state.turn) !== 'human'){
+    scheduleAIMove();
+  }
+});
+
+btnAnalyze.addEventListener('click', runManualAnalysis);
+
+btnToggleAnalysis.addEventListener('click', () => {
+  state.showAnalysis = !state.showAnalysis;
+  renderControls();
+});
+
+/* ---------- Arranque ---------- */
+newGame();
+
+})();
+</script>
+</body>
+</html>
